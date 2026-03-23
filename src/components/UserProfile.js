@@ -17,6 +17,7 @@ import { useMuseStore } from '../store/museStore';
 import { useWalletStore } from '../store/walletStore';
 import { useUserProfileStore } from '../store/userProfileStore';
 import ArtworkGrid from './ArtworkGrid';
+import CopyButton from './CopyButton';
 
 const UserProfile = () => {
   const { listings } = useMuseStore();
@@ -96,9 +97,12 @@ const UserProfile = () => {
                 {profile.username || 'Creator Profile'}
               </h1>
               <div className="flex items-center mt-1 sm:mt-2 space-x-3">
-                <p className="text-gray-500 font-mono text-xs sm:text-sm bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-                  {address?.slice(0, 6)}...{address?.slice(-4)}
-                </p>
+                <div className="flex items-center bg-gray-50 px-3 py-1 rounded-full border border-gray-100 group gap-1">
+                  <p className="text-gray-500 font-mono text-xs sm:text-sm">
+                    {address?.slice(0, 6)}...{address?.slice(-4)}
+                  </p>
+                  <CopyButton text={address} className="opacity-0 group-hover:opacity-100 transition-opacity -my-1" />
+                </div>
                 {profile.verification?.isVerified && (
                   <div className="flex items-center space-x-1.5 bg-yellow-50 px-2.5 py-1 rounded-full border border-yellow-100">
                     <Award className="w-3.5 h-3.5 text-yellow-600" />
@@ -291,11 +295,19 @@ const UserProfile = () => {
                       </p>
 
                       <div className="flex justify-between items-end mt-2">
-                        <p className="text-[10px] sm:text-xs text-gray-500 font-medium">
-                          {transaction.type === 'sale' ? `To: ${transaction.buyer?.slice(0, 4)}...${transaction.buyer?.slice(-4)}` :
-                           transaction.type === 'purchase' ? `From: ${transaction.seller?.slice(0, 4)}...${transaction.seller?.slice(-4)}` :
-                           `Listed by you`}
-                        </p>
+                        <div className="flex items-center gap-1 group/address">
+                          <p className="text-[10px] sm:text-xs text-gray-500 font-medium">
+                            {transaction.type === 'sale' ? `To: ${transaction.buyer?.slice(0, 4)}...${transaction.buyer?.slice(-4)}` :
+                             transaction.type === 'purchase' ? `From: ${transaction.seller?.slice(0, 4)}...${transaction.seller?.slice(-4)}` :
+                             `Listed by you`}
+                          </p>
+                          {(transaction.type === 'sale' && transaction.buyer) && (
+                            <CopyButton text={transaction.buyer} className="opacity-0 group-hover/address:opacity-100 transition-opacity" />
+                          )}
+                          {(transaction.type === 'purchase' && transaction.seller) && (
+                            <CopyButton text={transaction.seller} className="opacity-0 group-hover/address:opacity-100 transition-opacity" />
+                          )}
+                        </div>
                         <p className="text-[10px] text-gray-400">
                           {formatDate(transaction.timestamp).split(',')[0]}
                         </p>

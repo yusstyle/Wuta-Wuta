@@ -15,6 +15,7 @@ import {
 import { useMuseStore } from '../store/museStore';
 import { useWalletStore } from '../store/walletStore';
 import toast from 'react-hot-toast';
+import CopyButton from './CopyButton';
 
 const TransactionHistory = () => {
   const { userAddress, fetchWutaWutaTransactions } = useMuseStore();
@@ -330,8 +331,11 @@ const TransactionHistory = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 font-mono">
-                        {tx.hash.slice(0, 8)}...{tx.hash.slice(-8)}
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm text-gray-900 font-mono">
+                          {tx.hash.slice(0, 8)}...{tx.hash.slice(-8)}
+                        </div>
+                        <CopyButton text={tx.hash} />
                       </div>
                       {tx.memo && (
                         <div className="text-xs text-gray-500 mt-1">Memo: {tx.memo}</div>

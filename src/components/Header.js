@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Menu, Wallet, X, LogOut } from 'lucide-react';
 import { Button, Badge, Avatar } from './ui';
+import CopyButton from './CopyButton';
 
 const Header = ({ onMenuClick, onConnectWallet, onDisconnectWallet, address, isConnected }) => {
   return (
@@ -52,9 +53,12 @@ const Header = ({ onMenuClick, onConnectWallet, onDisconnectWallet, address, isC
                 />
                 <div className="flex flex-col pr-2">
                   <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight">Connected</p>
-                  <p className="text-xs sm:text-sm font-mono font-bold text-gray-900 leading-tight">
-                    {address.slice(0, 4)}...{address.slice(-4)}
-                  </p>
+                  <div className="flex items-center gap-1 group/address">
+                    <p className="text-xs sm:text-sm font-mono font-bold text-gray-900 leading-tight">
+                      {address.slice(0, 4)}...{address.slice(-4)}
+                    </p>
+                    <CopyButton text={address} className="opacity-0 group-hover/address:opacity-100 transition-opacity -my-1 -ml-1" />
+                  </div>
                 </div>
                 <Button
                   variant="ghost"
