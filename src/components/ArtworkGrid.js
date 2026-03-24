@@ -1,13 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, ShoppingCart, Sparkles } from 'lucide-react';
+import { Clock, ShoppingCart, Sparkles, Eye, Tag } from 'lucide-react';
 
 const ArtworkGrid = ({ 
   artworks, 
   listings = [], 
   onBuyArtwork, 
   isLoading, 
-  address 
+  address,
+  onAnalyzeArtwork 
 }) => {
   const getListingForArtwork = (artworkId) => {
     return listings.find(listing => listing.tokenId === artworkId);
@@ -42,12 +43,20 @@ const ArtworkGrid = ({
               
               {/* Overlays */}
               <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start pointer-events-none">
-                {artwork.metadata?.canEvolve && (
-                  <div className="bg-purple-600/90 backdrop-blur-md text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm flex items-center space-x-1">
-                    <Sparkles className="w-3 h-3" />
-                    <span>Evolvable</span>
-                  </div>
-                )}
+                <div className="flex gap-2">
+                  {artwork.metadata?.canEvolve && (
+                    <div className="bg-purple-600/90 backdrop-blur-md text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm flex items-center space-x-1">
+                      <Sparkles className="w-3 h-3" />
+                      <span>Evolvable</span>
+                    </div>
+                  )}
+                  {artwork.metadata?.isVisionAnalyzed && (
+                    <div className="bg-blue-600/90 backdrop-blur-md text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm flex items-center space-x-1">
+                      <Eye className="w-3 h-3" />
+                      <span>Vision AI</span>
+                    </div>
+                  )}
+                </div>
                 <div className="flex-1"></div>
                 {listing && (
                   <div className="bg-green-500/90 backdrop-blur-md text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm">
@@ -62,6 +71,38 @@ const ArtworkGrid = ({
               <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 text-base sm:text-lg leading-tight" title={artwork.metadata?.prompt || artwork.title}>
                 {artwork.metadata?.prompt || artwork.title || 'Untitled'}
               </h3>
+              
+              {/* AI-generated description */}
+              {artwork.metadata?.aiDescription && (
+                <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2 italic">
+                  "{artwork.metadata.aiDescription}"
+                </p>
+              )}
+              
+              {/* AI-generated tags */}
+              {artwork.metadata?.aiTags && artwork.metadata.aiTags.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-1 mb-2">
+                    <Tag className="w-3 h-3 text-purple-500" />
+                    <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">AI Tags</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {artwork.metadata.aiTags.slice(0, 4).map((tag, index) => (
+                      <span
+                        key={index}
+                        className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium border border-purple-100"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {artwork.metadata.aiTags.length > 4 && (
+                      <span className="px-2 py-0.5 bg-gray-50 text-gray-500 rounded text-xs font-medium">
+                        +{artwork.metadata.aiTags.length - 4}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               
               <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 mb-4 mt-auto">
                 <span className="flex items-center font-medium">
@@ -128,6 +169,15 @@ const ArtworkGrid = ({
               
               {isOwner && (
                 <div className="border-t border-gray-100 pt-3 sm:pt-4 mt-1">
+                  {!artwork.metadata?.isVisionAnalyzed && onAnalyzeArtwork && (
+                    <button
+                      onClick={() => onAnalyzeArtwork(artwork.id)}
+                      className="w-full mb-2 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Analyze with Vision AI
+                    </button>
+                  )}
                   <div className="bg-gray-50 text-gray-600 text-xs sm:text-sm font-semibold py-2.5 rounded-lg text-center border border-gray-200">
                     Owned by You
                   </div>

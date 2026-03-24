@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { SorobanRpc } from '@sorobanrpc';
 import { Keypair, Horizon } from '@stellar/stellar-sdk';
+import visionService from '../ai/visionService';
 
 const useMuseStore = create((set, get) => ({
   // State
   isConnected: false,
   isLoading: false,
   error: null,
+  isAnalyzing: false,
   
   // Stellar connection
   stellarClient: null,
@@ -116,7 +118,23 @@ const useMuseStore = create((set, get) => ({
       const { stellarClient, contracts, userAddress } = get();
       if (!stellarClient || !userAddress) throw new Error('Not connected to Stellar');
       
-      // Create artwork metadata
+      // Generate AI artwork first
+      const aiGeneratedImage = await get().generateArtwork(params);
+      
+      // Analyze artwork with Vision AI
+      set({ isAnalyzing: true });
+      let visionAnalysis = null;
+      
+      try {
+        visionAnalysis = await visionService.analyzeArtwork(aiGeneratedImage, params.prompt);
+      } catch (visionError) {
+        console.warn('Vision analysis failed, continuing without it:', visionError);
+        // Continue without vision analysis
+      } finally {
+        set({ isAnalyzing: false });
+      }
+      
+      // Create artwork metadata with vision analysis
       const metadata = {
         prompt: params.prompt,
         aiModel: params.aiModel,
@@ -124,6 +142,15 @@ const useMuseStore = create((set, get) => ({
         aiContribution: params.aiContribution,
         canEvolve: params.canEvolve,
         timestamp: Date.now(),
+        // Add vision analysis results
+        aiDescription: visionAnalysis?.description || '',
+        aiTags: visionAnalysis?.tags || [],
+        aiStyle: visionAnalysis?.style || 'unknown',
+        aiMood: visionAnalysis?.mood || 'neutral',
+        aiColors: visionAnalysis?.dominant_colors || [],
+        aiObjects: visionAnalysis?.objects || [],
+        visionConfidence: visionAnalysis?.confidence || 0,
+        isVisionAnalyzed: !!visionAnalysis && !visionAnalysis.is_fallback,
       };
       
       // Call smart contract to mint NFT
@@ -147,9 +174,6 @@ const useMuseStore = create((set, get) => ({
         .build()
       );
       
-      // Generate AI artwork (in real implementation)
-      const aiGeneratedImage = await get().generateArtwork(params);
-      
       // Add to local state
       const newArtwork = {
         id: Date.now().toString(),
@@ -171,7 +195,8 @@ const useMuseStore = create((set, get) => ({
       console.error('Failed to create artwork:', error);
       set({ 
         error: error.message, 
-        isLoading: false 
+        isLoading: false,
+        isAnalyzing: false
       });
       throw error;
     }
@@ -505,6 +530,225 @@ const useMuseStore = create((set, get) => ({
       };
     }
     return null;
+  },
+
+  // Vision AI functions
+  analyzeExistingArtwork: async (artworkId) => {
+    try {
+      set({ isAnalyzing: true, error: null });
+      
+      const { artworks } = get();
+      const artwork = artworks.find(a => a.id === artworkId);
+      
+      if (!artwork) {
+        throw new Error('Artwork not found');
+      }
+      
+      // Analyze artwork with Vision AI
+      const visionAnalysis = await visionService.analyzeArtwork(artwork.imageUrl, artwork.metadata?.prompt || '');
+      
+      // Update artwork metadata with vision analysis
+      const updatedMetadata = {
+        ...artwork.metadata,
+        aiDescription: visionAnalysis.description,
+        aiTags: visionAnalysis.tags,
+        aiStyle: visionAnalysis.style,
+        aiMood: visionAnalysis.mood,
+        aiColors: visionAnalysis.dominant_colors,
+        aiObjects: visionAnalysis.objects,
+        visionConfidence: visionAnalysis.confidence,
+        isVisionAnalyzed: !visionAnalysis.is_fallback,
+      };
+      
+      // Update artwork in state
+      set(state => ({
+        artworks: state.artworks.map(a => 
+          a.id === artworkId 
+            ? { ...a, metadata: updatedMetadata }
+            : a
+        ),
+        isAnalyzing: false,
+      }));
+      
+      return visionAnalysis;
+      
+    } catch (error) {
+      console.error('Failed to analyze existing artwork:', error);
+      set({ 
+        error: error.message, 
+        isAnalyzing: false 
+      });
+      throw error;
+    }
+  },
+
+  batchAnalyzeArtworks: async (artworkIds) => {
+    try {
+      set({ isAnalyzing: true, error: null });
+      
+      const { artworks } = get();
+      const artworksToAnalyze = artworkIds.map(id => {
+        const artwork = artworks.find(a => a.id === id);
+        return {
+          id,
+          imageUrl: artwork.imageUrl,
+          prompt: artwork.metadata?.prompt || ''
+        };
+      });
+      
+      const results = await visionService.batchAnalyze(artworksToAnalyze);
+      
+      // Update artworks with successful analyses
+      const updatedArtworks = artworks.map(artwork => {
+        const result = results.find(r => r.id === artwork.id && r.success);
+        if (result) {
+          return {
+            ...artwork,
+            metadata: {
+              ...artwork.metadata,
+              aiDescription: result.analysis.description,
+              aiTags: result.analysis.tags,
+              aiStyle: result.analysis.style,
+              aiMood: result.analysis.mood,
+              aiColors: result.analysis.dominant_colors,
+              aiObjects: result.analysis.objects,
+              visionConfidence: result.analysis.confidence,
+              isVisionAnalyzed: !result.analysis.is_fallback,
+            }
+          };
+        }
+        return artwork;
+      });
+      
+      set(state => ({
+        artworks: updatedArtworks,
+        isAnalyzing: false,
+      }));
+      
+      return results;
+      
+    } catch (error) {
+      console.error('Failed to batch analyze artworks:', error);
+      set({ 
+        error: error.message, 
+        isAnalyzing: false 
+      });
+      throw error;
+    }
+  },
+
+  // Enhanced search functions
+  searchArtworks: (query, filters = {}) => {
+    const { artworks } = get();
+    const searchTerm = query.toLowerCase().trim();
+    
+    if (!searchTerm && Object.keys(filters).length === 0) {
+      return artworks;
+    }
+    
+    return artworks.filter(artwork => {
+      const metadata = artwork.metadata || {};
+      
+      // Search in original prompt
+      const promptMatch = metadata.prompt?.toLowerCase().includes(searchTerm);
+      
+      // Search in AI-generated description
+      const descriptionMatch = metadata.aiDescription?.toLowerCase().includes(searchTerm);
+      
+      // Search in AI-generated tags
+      const tagsMatch = metadata.aiTags?.some(tag => 
+        tag.toLowerCase().includes(searchTerm)
+      );
+      
+      // Search in AI objects
+      const objectsMatch = metadata.aiObjects?.some(obj => 
+        typeof obj === 'string' 
+          ? obj.toLowerCase().includes(searchTerm)
+          : obj.name?.toLowerCase().includes(searchTerm)
+      );
+      
+      // Search in style
+      const styleMatch = metadata.aiStyle?.toLowerCase().includes(searchTerm);
+      
+      // Search in mood
+      const moodMatch = metadata.aiMood?.toLowerCase().includes(searchTerm);
+      
+      // Search in colors
+      const colorsMatch = metadata.aiColors?.some(color => 
+        typeof color === 'string' 
+          ? color.toLowerCase().includes(searchTerm)
+          : color.name?.toLowerCase().includes(searchTerm)
+      );
+      
+      const matchesSearch = promptMatch || descriptionMatch || tagsMatch || 
+                          objectsMatch || styleMatch || moodMatch || colorsMatch;
+      
+      // Apply filters
+      let matchesFilters = true;
+      
+      if (filters.style && filters.style !== 'all') {
+        matchesFilters = metadata.aiStyle === filters.style;
+      }
+      
+      if (filters.mood && filters.mood !== 'all') {
+        matchesFilters = metadata.aiMood === filters.mood;
+      }
+      
+      if (filters.hasVisionAnalysis) {
+        matchesFilters = metadata.isVisionAnalyzed === true;
+      }
+      
+      if (filters.aiModel && filters.aiModel !== 'all') {
+        matchesFilters = metadata.aiModel === filters.aiModel;
+      }
+      
+      return matchesSearch && matchesFilters;
+    });
+  },
+
+  getPopularTags: () => {
+    const { artworks } = get();
+    const tagCounts = {};
+    
+    artworks.forEach(artwork => {
+      const tags = artwork.metadata?.aiTags || [];
+      tags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+    
+    return Object.entries(tagCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 20)
+      .map(([tag, count]) => ({ tag, count }));
+  },
+
+  getAvailableStyles: () => {
+    const { artworks } = get();
+    const styles = new Set();
+    
+    artworks.forEach(artwork => {
+      const style = artwork.metadata?.aiStyle;
+      if (style && style !== 'unknown') {
+        styles.add(style);
+      }
+    });
+    
+    return Array.from(styles).sort();
+  },
+
+  getAvailableMoods: () => {
+    const { artworks } = get();
+    const moods = new Set();
+    
+    artworks.forEach(artwork => {
+      const mood = artwork.metadata?.aiMood;
+      if (mood && mood !== 'neutral') {
+        moods.add(mood);
+      }
+    });
+    
+    return Array.from(moods).sort();
   },
 }));
 
