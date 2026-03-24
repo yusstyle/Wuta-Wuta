@@ -12,10 +12,19 @@ import {
 } from 'lucide-react';
 import { useMuseStore } from '../store/museStore';
 import { useWalletStore } from '../store/walletStore';
+import AdvancedSettings from './AdvancedSettings';
 import toast from 'react-hot-toast';
 
 const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
-  const { createCollaborativeArtwork, aiModels, isLoading } = useMuseStore();
+  const { 
+    createCollaborativeArtwork, 
+    aiModels, 
+    isLoading, 
+    advancedParameters, 
+    updateAdvancedParameters,
+    parameterPresets,
+    applyParameterPreset 
+  } = useMuseStore();
   const { address } = useWalletStore();
   
   // Form state
@@ -29,6 +38,9 @@ const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
     aspectRatio: '1:1',
     quality: 'high',
   });
+  
+  // Advanced settings state
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   
   // Canvas state
   const canvasRef = useRef(null);
@@ -141,6 +153,7 @@ const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
         ...formData,
         humanInput,
         contentHash: humanInput ? '0x' + btoa(humanInput).slice(0, 40) : '0x0000000000000000000000000000000000000000',
+        advancedParameters: advancedParameters, // Include advanced parameters
       });
       
       toast.success('Artwork created successfully!');
@@ -159,6 +172,15 @@ const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
     } catch (error) {
       toast.error(error.message || 'Failed to create artwork');
     }
+  };
+  
+  const handleAdvancedParametersChange = (newParameters) => {
+    updateAdvancedParameters(newParameters);
+  };
+  
+  const handlePresetApply = (presetParameters) => {
+    updateAdvancedParameters(presetParameters);
+    toast.success('Preset applied successfully!');
   };
   
   return (
@@ -309,11 +331,20 @@ const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
             transition={{ delay: 0.4 }}
             className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6"
           >
-            <div className="flex items-center mb-4 sm:mb-5">
-              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center mr-3">
-                <Settings className="w-4 h-4 text-gray-600" />
+            <div className="flex items-center justify-between mb-4 sm:mb-5">
+              <div className="flex items-center">
+                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center mr-3">
+                  <Settings className="w-4 h-4 text-gray-600" />
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Advanced Settings</h3>
               </div>
-              <h3 className="text-base sm:text-lg font-bold text-gray-900">Advanced Settings</h3>
+              <button
+                onClick={() => setShowAdvancedSettings(true)}
+                className="px-3 py-1.5 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors flex items-center space-x-1"
+              >
+                <Sliders className="w-3 h-3" />
+                <span>AI Parameters</span>
+              </button>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -358,6 +389,24 @@ const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
                     <span className="block text-xs text-gray-500">Let other users build upon your artwork</span>
                   </div>
                 </label>
+              </div>
+            </div>
+            
+            {/* Advanced Parameters Status */}
+            <div className="mt-4 p-3 bg-purple-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                  <span className="text-xs font-medium text-purple-700">Advanced AI Parameters</span>
+                </div>
+                <span className="text-xs text-purple-600">
+                  {Object.keys(advancedParameters).length} parameters configured
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-purple-600">
+                Guidance: {advancedParameters.guidanceScale.toFixed(1)} | 
+                Steps: {advancedParameters.numInferenceSteps} | 
+                Quality: {(advancedParameters.quality * 100).toFixed(0)}%
               </div>
             </div>
           </motion.div>
@@ -443,6 +492,16 @@ const CreateArt = ({ currentPrompt, setCurrentPrompt }) => {
           </motion.div>
         </div>
       </div>
+      
+      {/* Advanced Settings Modal */}
+      <AdvancedSettings
+        isOpen={showAdvancedSettings}
+        onClose={() => setShowAdvancedSettings(false)}
+        parameters={advancedParameters}
+        onParametersChange={handleAdvancedParametersChange}
+        presets={parameterPresets}
+        onPresetApply={handlePresetApply}
+      />
       
       {/* Styles for range slider thumb */}
       <style dangerouslySetInnerHTML={{__html: `

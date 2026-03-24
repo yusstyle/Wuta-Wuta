@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useInfiniteScroll } from '../utils/useInfiniteScroll';
 import { motion } from 'framer-motion';
 import { 
-  Gallery as GalleryIcon, 
+  Image as GalleryIcon, 
   Search, 
   ShoppingCart,
   TrendingUp,
@@ -88,6 +89,8 @@ const Gallery = () => {
     }
   });
   
+  const { visibleItems, hasMore, sentinelRef } = useInfiniteScroll(sortedArtworks);
+
   const handleBuyArtwork = async (tokenId, price) => {
     if (!address) {
       toast.error('Please connect your wallet first');
@@ -398,13 +401,20 @@ const Gallery = () => {
 
       {/* Gallery Grid using responsive component */}
       <ArtworkGrid 
-        artworks={sortedArtworks} 
+        artworks={visibleItems} 
         listings={listings} 
         onBuyArtwork={handleBuyArtwork} 
         onAnalyzeArtwork={handleAnalyzeArtwork}
         isLoading={isLoading || isAnalyzing} 
         address={address} 
       />
+
+      {/* Infinite scroll sentinel */}
+      {hasMore && (
+        <div ref={sentinelRef} className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" />
+        </div>
+      )}
       
       {/* Empty State */}
       {sortedArtworks.length === 0 && (
