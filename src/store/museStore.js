@@ -39,6 +39,107 @@ const useMuseStore = create((set, get) => ({
     { id: 'midjourney', name: 'Midjourney', type: 'image' },
   ],
   
+  // Advanced AI Parameters
+  advancedParameters: {
+    // Generation parameters
+    temperature: 0.8,
+    topK: 50,
+    topP: 0.9,
+    guidanceScale: 7.5,
+    numInferenceSteps: 50,
+    seed: -1,
+    
+    // Image-specific parameters
+    width: 512,
+    height: 512,
+    quality: 0.9,
+    sharpness: 1.0,
+    contrast: 1.0,
+    saturation: 1.0,
+    
+    // Style parameters
+    strength: 0.8,
+    noiseLevel: 0.1,
+    detailEnhancement: 0.5,
+    colorHarmony: 0.7,
+    compositionBalance: 0.6,
+    
+    // Performance parameters
+    batchSize: 1,
+    enableAttentionSlicing: true,
+    enableCpuOffload: false,
+    enableModelCaching: true,
+    maxGenerationTime: 120,
+    
+    // Advanced AI parameters
+    negativePrompt: '',
+    promptWeighting: true,
+    crossAttentionControl: 0.5,
+    selfAttentionControl: 0.3,
+    temporalConsistency: 0.8,
+    
+    // Model-specific parameters
+    modelVersion: 'latest',
+    customModelPath: '',
+    loraStrength: 0.7,
+    controlNetStrength: 0.8,
+    embeddingStrength: 0.6
+  },
+  
+  // Parameter presets
+  parameterPresets: [
+    {
+      id: 'photorealistic',
+      name: 'Photorealistic',
+      description: 'Highly detailed, realistic images',
+      parameters: {
+        guidanceScale: 7.5,
+        numInferenceSteps: 50,
+        quality: 0.95,
+        sharpness: 1.2,
+        contrast: 1.1,
+        detailEnhancement: 0.8
+      }
+    },
+    {
+      id: 'artistic',
+      name: 'Artistic',
+      description: 'Creative and stylized outputs',
+      parameters: {
+        temperature: 1.2,
+        guidanceScale: 6.0,
+        numInferenceSteps: 40,
+        strength: 0.9,
+        colorHarmony: 0.8,
+        compositionBalance: 0.7
+      }
+    },
+    {
+      id: 'fast',
+      name: 'Fast Generation',
+      description: 'Quick results with lower quality',
+      parameters: {
+        numInferenceSteps: 20,
+        quality: 0.7,
+        enableAttentionSlicing: true,
+        maxGenerationTime: 60
+      }
+    },
+    {
+      id: 'high-quality',
+      name: 'High Quality',
+      description: 'Maximum quality with longer generation time',
+      parameters: {
+        guidanceScale: 8.0,
+        numInferenceSteps: 100,
+        quality: 1.0,
+        sharpness: 1.3,
+        detailEnhancement: 0.9,
+        maxGenerationTime: 180
+      }
+    }
+  ],
+  
   // Actions
   initializeMuse: async () => {
     try {
@@ -620,6 +721,149 @@ const useMuseStore = create((set, get) => ({
       };
     }
     return null;
+  },
+  
+  // Advanced Parameters Management
+  updateAdvancedParameters: (newParameters) => {
+    set(state => ({
+      advancedParameters: { ...state.advancedParameters, ...newParameters }
+    }));
+  },
+  
+  resetAdvancedParameters: () => {
+    const defaultParameters = {
+      // Generation parameters
+      temperature: 0.8,
+      topK: 50,
+      topP: 0.9,
+      guidanceScale: 7.5,
+      numInferenceSteps: 50,
+      seed: -1,
+      
+      // Image-specific parameters
+      width: 512,
+      height: 512,
+      quality: 0.9,
+      sharpness: 1.0,
+      contrast: 1.0,
+      saturation: 1.0,
+      
+      // Style parameters
+      strength: 0.8,
+      noiseLevel: 0.1,
+      detailEnhancement: 0.5,
+      colorHarmony: 0.7,
+      compositionBalance: 0.6,
+      
+      // Performance parameters
+      batchSize: 1,
+      enableAttentionSlicing: true,
+      enableCpuOffload: false,
+      enableModelCaching: true,
+      maxGenerationTime: 120,
+      
+      // Advanced AI parameters
+      negativePrompt: '',
+      promptWeighting: true,
+      crossAttentionControl: 0.5,
+      selfAttentionControl: 0.3,
+      temporalConsistency: 0.8,
+      
+      // Model-specific parameters
+      modelVersion: 'latest',
+      customModelPath: '',
+      loraStrength: 0.7,
+      controlNetStrength: 0.8,
+      embeddingStrength: 0.6
+    };
+    
+    set({ advancedParameters: defaultParameters });
+  },
+  
+  applyParameterPreset: (presetId) => {
+    const { parameterPresets, advancedParameters } = get();
+    const preset = parameterPresets.find(p => p.id === presetId);
+    
+    if (preset) {
+      const updatedParameters = { ...advancedParameters, ...preset.parameters };
+      set({ advancedParameters: updatedParameters });
+      return updatedParameters;
+    }
+    
+    return null;
+  },
+  
+  exportAdvancedParameters: () => {
+    const { advancedParameters } = get();
+    return JSON.stringify(advancedParameters, null, 2);
+  },
+  
+  importAdvancedParameters: (parametersJson) => {
+    try {
+      const imported = JSON.parse(parametersJson);
+      const { advancedParameters } = get();
+      const updatedParameters = { ...advancedParameters, ...imported };
+      set({ advancedParameters: updatedParameters });
+      return updatedParameters;
+    } catch (error) {
+      console.error('Failed to import advanced parameters:', error);
+      throw error;
+    }
+  },
+  
+  validateAdvancedParameters: (parameters) => {
+    const validationRules = {
+      temperature: { min: 0.1, max: 2.0, type: 'number' },
+      topK: { min: 1, max: 100, type: 'number' },
+      topP: { min: 0.1, max: 1.0, type: 'number' },
+      guidanceScale: { min: 1.0, max: 20.0, type: 'number' },
+      numInferenceSteps: { min: 10, max: 150, type: 'number' },
+      seed: { type: 'number' },
+      width: { min: 256, max: 1024, type: 'number' },
+      height: { min: 256, max: 1024, type: 'number' },
+      quality: { min: 0.1, max: 1.0, type: 'number' },
+      sharpness: { min: 0.0, max: 2.0, type: 'number' },
+      contrast: { min: 0.0, max: 2.0, type: 'number' },
+      saturation: { min: 0.0, max: 2.0, type: 'number' },
+      strength: { min: 0.0, max: 1.0, type: 'number' },
+      noiseLevel: { min: 0.0, max: 1.0, type: 'number' },
+      detailEnhancement: { min: 0.0, max: 1.0, type: 'number' },
+      colorHarmony: { min: 0.0, max: 1.0, type: 'number' },
+      compositionBalance: { min: 0.0, max: 1.0, type: 'number' },
+      batchSize: { min: 1, max: 4, type: 'number' },
+      maxGenerationTime: { min: 30, max: 300, type: 'number' },
+      crossAttentionControl: { min: 0.0, max: 1.0, type: 'number' },
+      selfAttentionControl: { min: 0.0, max: 1.0, type: 'number' },
+      temporalConsistency: { min: 0.0, max: 1.0, type: 'number' },
+      loraStrength: { min: 0.0, max: 1.0, type: 'number' },
+      controlNetStrength: { min: 0.0, max: 1.0, type: 'number' },
+      embeddingStrength: { min: 0.0, max: 1.0, type: 'number' }
+    };
+    
+    const errors = [];
+    
+    Object.keys(parameters).forEach(key => {
+      const value = parameters[key];
+      const rule = validationRules[key];
+      
+      if (rule) {
+        if (rule.type === 'number' && (typeof value !== 'number' || isNaN(value))) {
+          errors.push(`${key} must be a valid number`);
+        } else if (rule.type === 'number' && typeof value === 'number') {
+          if (rule.min !== undefined && value < rule.min) {
+            errors.push(`${key} must be at least ${rule.min}`);
+          }
+          if (rule.max !== undefined && value > rule.max) {
+            errors.push(`${key} must be at most ${rule.max}`);
+          }
+        }
+      }
+    });
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
   },
 }));
 
