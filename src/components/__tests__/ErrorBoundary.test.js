@@ -115,7 +115,7 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('No error')).toBeInTheDocument();
   });
 
-  it('logs error to console in development mode', () => {
+  it('renders development error details without custom logging', () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
 
@@ -125,12 +125,8 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    // Check that error was logged
-    expect(console.error).toHaveBeenCalledWith(
-      'Error Boundary caught an error:',
-      expect.any(Error),
-      expect.any(Object)
-    );
+    expect(screen.getByText(/Show Error Details \(Development\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Error ID:/)).toBeInTheDocument();
 
     process.env.NODE_ENV = originalNodeEnv;
   });
