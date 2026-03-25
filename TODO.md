@@ -1,44 +1,40 @@
-# Stellar Horizon Webhook Listener Implementation
-## Status: 🚀 In Progress
+# ✅ CI/CD Pipeline COMPLETE
 
-### Step 1: [✅] Identify STELLAR_CONTRACT_ID
-- Use env var STELLAR_CONTRACT_ID (placeholder for now, configurable)
-- Search frontend for contract addresses (e.g. src/components/TransactionHistory.js, stores)
-- Add to .env: STELLAR_CONTRACT_ID=...
+## All Steps Completed ✓
 
-### Step 2: [✅] Install Dependencies
-```
-npm i stellar-sdk ws events
-```
-```
-cd server && npm i stellar-sdk ws events
-cd ..
-```
+**Core Implementation**:
+- [x] **GitHub Actions**: `.github/workflows/soroban-ci-cd.yml` (CI/CD, mainnet fork, gas prediction)
+- [x] **Test Script**: `stellar-contracts/scripts/test-mainnet-fork.sh`
+- [x] **Gas Config**: `stellar-contracts/.gas-thresholds.json`
+- [x] **NPM Scripts**: Updated `package.json` (`npm run test:gas`)
+- [x] **Gas Reporter**: `scripts/gas-report.js` + HTML output
+- [x] **gitignore**: Soroban cache/WASM ignored
+- [x] **README**: CI/CD docs integrated
+- [x] **Dependabot**: `.github/dependabot.yml` (npm/cargo/actions)
 
-### Step 3: [✅] Update Prisma Schema
-- Added Transaction model + EventType enum
-- Added indexes on txHash/contractId
-```
-npx prisma db push
-npx prisma generate
+## 🧪 Local Testing Commands
+```bash
+cd stellar-contracts
+npm install
+npm run build:wutawuta
+npm run test:gas  # Runs mainnet fork + gas check
+npm run gas:report  # View HTML report
 ```
 
-### Step 4: [✅] Update server/index.js
-- Import Prisma, stellar-sdk
-- Env config
-- Start listener
+## 🚀 Next Steps (Manual)
+1. **Push to GitHub** & create PR to trigger CI
+2. **Add secrets** to GitHub repo:
+   ```
+   STELLAR_DEPLOY_KEY_TESTNET=...
+   STELLAR_DEPLOY_KEY_MAINNET=...
+   ```
+3. **Test CD**: Merge to main → testnet deploy; Release tag → mainnet
+4. **Monitor**: Gas reports in CI artifacts/PR comments
 
-### Step 5: [✅] Create server/stellarListener.js
-- Horizon streaming
-- Event parsing → DB updates
+## 📈 Expected Outcomes
+- **Gas Prediction**: Pre-deployment CPU cost analysis
+- **Mainnet Simulation**: Local Soroban node with mainnet state
+- **Failure Detection**: Auto-fail PRs on gas limits/errors
+- **Automated Deploys**: Testnet/mainnet with approvals
 
-### Step 6: [✅] Test Listener
-- Simulate tx or monitor testnet
-- Verify DB updates
-
-### Step 7: [✅] Frontend Integration (Optional)
-- Replace polling with server WS
-
-### Step 8: [✅] Update Docs
-- README.md, TESTING.md
-
+**Pipeline ready! 🎉 Commit/push to verify on GitHub Actions.**
