@@ -1,19 +1,18 @@
 /**
  * ipfsService.js
- * Issue #6 — Secure Metadata Storage via IPFS/Pinata
+ * Issue #6 - Secure Metadata Storage via IPFS/Pinata
  *
- * Handles pinning AI-generated art files and their metadata to IPFS
- * via the Pinata API so content is permanent and tamper-proof.
- *
- * All CIDs returned are content-addressed — any tampering breaks the hash.
+ * Handles signed Muse uploads so only the connected Stellar wallet holder
+ * can authorize artwork pinning through the backend.
  */
 
 import axios from "axios";
-
-// ─── Config ──────────────────────────────────────────────────────────────────
+import { useWalletStore } from "../store/walletStore";
 
 const PINATA_API_URL = "https://api.pinata.cloud";
 const PINATA_GATEWAY = process.env.REACT_APP_PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs";
+const MUSE_UPLOAD_API_URL = process.env.REACT_APP_MUSE_UPLOAD_API_URL || "/api/muse/upload";
+const MUSE_UPLOAD_CHALLENGE_URL = `${MUSE_UPLOAD_API_URL}/challenge`;
 
 const pinataHeaders = () => {
   const jwt = process.env.REACT_APP_PINATA_JWT;
@@ -24,33 +23,19 @@ const pinataHeaders = () => {
   };
 };
 
-// ─── 1. Pin a File (image / artwork) to IPFS ─────────────────────────────────
-
-/**
- * Uploads a raw file (Blob/File) to IPFS via Pinata.
- *
- * @param {File|Blob} file       - The artwork file to pin.
- * @param {string}    artworkId  - Unique ID used for Pinata metadata label.
- * @returns {Promise<string>}    - IPFS CID of the pinned file.
- */
 export async function pinFileToIPFS(file, artworkId) {
   const formData = new FormData();
   formData.append("file", file);
 
-  // Pinata metadata stored alongside the pin (not on-chain, just for management)
-  const pinataMetadata = JSON.stringify({
+  formData.append("pinataMetadata", JSON.stringify({
     name: `muse-artwork-${artworkId}`,
     keyvalues: {
       project: "Wuta-Wuta",
       type: "artwork",
       artworkId,
     },
-  });
-  formData.append("pinataMetadata", pinataMetadata);
-
-  // Pin options — wrap with directory so the file keeps its name
-  const pinataOptions = JSON.stringify({ cidVersion: 1 });
-  formData.append("pinataOptions", pinataOptions);
+  }));
+  formData.append("pinataOptions", JSON.stringify({ cidVersion: 1 }));
 
   const jwt = process.env.REACT_APP_PINATA_JWT;
   if (!jwt) throw new Error("REACT_APP_PINATA_JWT is not set in environment variables.");
@@ -59,24 +44,12 @@ export async function pinFileToIPFS(file, artworkId) {
     maxBodyLength: Infinity,
     headers: {
       Authorization: `Bearer ${jwt}`,
-      // Let axios set multipart/form-data boundary automatically
     },
   });
 
-  const cid = response.data.IpfsHash;
-  console.log(`[IPFS] Artwork pinned — CID: ${cid}`);
-  return cid;
+  return response.data.IpfsHash;
 }
 
-// ─── 2. Pin JSON Metadata to IPFS ────────────────────────────────────────────
-
-/**
- * Pins an ERC-721-compatible metadata JSON object to IPFS.
- *
- * @param {object} metadata   - NFT metadata (name, description, image CID, attributes…)
- * @param {string} artworkId  - Unique ID for the Pinata label.
- * @returns {Promise<string>} - IPFS CID of the metadata JSON.
- */
 export async function pinMetadataToIPFS(metadata, artworkId) {
   const body = {
     pinataContent: metadata,
@@ -95,26 +68,9 @@ export async function pinMetadataToIPFS(metadata, artworkId) {
     headers: pinataHeaders(),
   });
 
-  const cid = response.data.IpfsHash;
-  console.log(`[IPFS] Metadata pinned — CID: ${cid}`);
-  return cid;
+  return response.data.IpfsHash;
 }
 
-// ─── 3. Build ERC-721 Metadata Object ────────────────────────────────────────
-
-/**
- * Constructs the standard NFT metadata object from artwork details.
- *
- * @param {object} params
- * @param {string} params.name            - Artwork title.
- * @param {string} params.description     - Artwork description.
- * @param {string} params.imageCID        - IPFS CID of the artwork image.
- * @param {string} params.artistAddress   - Ethereum address of the human artist.
- * @param {string} params.aiModel         - AI model used (e.g. "Stable Diffusion v2").
- * @param {string[]} params.collaborators - Additional collaborator addresses.
- * @param {object[]} [params.attributes]  - Extra ERC-721 attribute array.
- * @returns {object}                      - ERC-721 metadata JSON.
- */
 export function buildNFTMetadata({
   name,
   description,
@@ -142,39 +98,74 @@ export function buildNFTMetadata({
   };
 }
 
-// ─── 4. Full Upload Pipeline ──────────────────────────────────────────────────
-
-/**
- * End-to-end upload: pins the artwork file, builds metadata, pins metadata.
- *
- * @param {File|Blob} artworkFile - The raw artwork image file.
- * @param {object}    artworkInfo - Fields for buildNFTMetadata (minus imageCID).
- * @returns {Promise<{imageCID: string, metadataCID: string, tokenURI: string}>}
- */
 export async function uploadArtworkToIPFS(artworkFile, artworkInfo) {
-  // Step 1 — pin the image
-  const imageCID = await pinFileToIPFS(artworkFile, artworkInfo.artworkId);
+  const { address, isConnected, signMessage } = useWalletStore.getState();
 
-  // Step 2 — build metadata with the image CID baked in
-  const metadata = buildNFTMetadata({ ...artworkInfo, imageCID });
+  if (!isConnected || !address) {
+    throw new Error("Connect a Stellar wallet before uploading.");
+  }
 
-  // Step 3 — pin the metadata JSON
-  const metadataCID = await pinMetadataToIPFS(metadata, artworkInfo.artworkId);
+  if (artworkInfo.artistAddress && artworkInfo.artistAddress !== address) {
+    throw new Error("Upload signer does not match the selected Stellar wallet.");
+  }
 
-  // The tokenURI passed to the smart contract
-  const tokenURI = `ipfs://${metadataCID}`;
+  const fileBuffer = await artworkFile.arrayBuffer();
+  const fileSha256 = await sha256Hex(fileBuffer);
+  const timestamp = new Date().toISOString();
+  const nonce = crypto.randomUUID();
 
-  return { imageCID, metadataCID, tokenURI };
+  const challengeResponse = await axios.post(MUSE_UPLOAD_CHALLENGE_URL, {
+    publicKey: address,
+    artworkId: artworkInfo.artworkId,
+    name: artworkInfo.name,
+    description: artworkInfo.description,
+    aiModel: artworkInfo.aiModel,
+    mimeType: artworkFile.type || "application/octet-stream",
+    fileSha256,
+    fileSize: artworkFile.size,
+    timestamp,
+    nonce,
+  });
+
+  const signature = await signMessage(challengeResponse.data.challenge);
+  const formData = new FormData();
+  formData.append("artwork", artworkFile);
+  formData.append("publicKey", address);
+  formData.append("artworkId", artworkInfo.artworkId);
+  formData.append("name", artworkInfo.name);
+  formData.append("description", artworkInfo.description);
+  formData.append("aiModel", artworkInfo.aiModel);
+  formData.append("timestamp", timestamp);
+  formData.append("nonce", nonce);
+  formData.append("signature", normalizeSignature(signature));
+
+  const response = await axios.post(MUSE_UPLOAD_API_URL, formData);
+  return response.data.data;
 }
 
-// ─── 5. Verify a Pin is Still Live ───────────────────────────────────────────
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", value);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
-/**
- * Checks whether a CID is currently pinned on Pinata.
- *
- * @param {string} cid - IPFS CID to verify.
- * @returns {Promise<boolean>}
- */
+function normalizeSignature(signature) {
+  if (typeof signature === "string") {
+    return signature;
+  }
+
+  if (signature?.signature) {
+    return signature.signature;
+  }
+
+  if (signature?.signedMessage) {
+    return signature.signedMessage;
+  }
+
+  return JSON.stringify(signature);
+}
+
 export async function verifyCIDPinned(cid) {
   const response = await axios.get(`${PINATA_API_URL}/pinning/pinList`, {
     headers: pinataHeaders(),
@@ -183,30 +174,14 @@ export async function verifyCIDPinned(cid) {
   return response.data.count > 0;
 }
 
-// ─── 6. Retrieve Metadata from IPFS ──────────────────────────────────────────
-
-/**
- * Fetches and parses the NFT metadata JSON from IPFS via the configured gateway.
- *
- * @param {string} metadataCID - IPFS CID of the metadata JSON.
- * @returns {Promise<object>}  - Parsed metadata object.
- */
 export async function fetchMetadataFromIPFS(metadataCID) {
   const url = `${PINATA_GATEWAY}/${metadataCID}`;
   const response = await axios.get(url);
   return response.data;
 }
 
-// ─── 7. Unpin (cleanup) ───────────────────────────────────────────────────────
-
-/**
- * Removes a pin from Pinata (use with caution — content may become unavailable).
- *
- * @param {string} cid - IPFS CID to unpin.
- */
 export async function unpinFromIPFS(cid) {
   await axios.delete(`${PINATA_API_URL}/pinning/unpin/${cid}`, {
     headers: pinataHeaders(),
   });
-  console.log(`[IPFS] Unpinned CID: ${cid}`);
 }

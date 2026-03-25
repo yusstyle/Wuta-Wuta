@@ -2,10 +2,21 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const multer = require('multer');
 require('dotenv').config();
+const {
+  buildMuseUploadChallenge,
+  validateMuseUploadRequest,
+} = require('./utils/museUploadAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
 
 // Middleware
 app.use(cors({
@@ -157,6 +168,115 @@ class AIService {
 
 const aiService = new AIService();
 
+function getPinataJwt() {
+  return process.env.PINATA_JWT || process.env.REACT_APP_PINATA_JWT;
+}
+
+function getPinataGateway() {
+  return process.env.PINATA_GATEWAY || process.env.REACT_APP_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
+}
+
+function pinataJsonHeaders() {
+  const jwt = getPinataJwt();
+  if (!jwt) {
+    throw new Error('Pinata JWT is not configured');
+  }
+
+  return {
+    Authorization: `Bearer ${jwt}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+function buildNFTMetadata({
+  name,
+  description,
+  imageCID,
+  artistAddress,
+  aiModel,
+  collaborators = [],
+  attributes = [],
+}) {
+  const gateway = getPinataGateway();
+
+  return {
+    name,
+    description,
+    image: `ipfs://${imageCID}`,
+    external_url: `${gateway}/${imageCID}`,
+    artist: artistAddress,
+    ai_model: aiModel,
+    collaborators,
+    created_at: new Date().toISOString(),
+    attributes: [
+      { trait_type: 'AI Model', value: aiModel },
+      { trait_type: 'Artist', value: artistAddress },
+      { trait_type: 'Collaboration Type', value: 'AI-Human' },
+      ...attributes,
+    ],
+  };
+}
+
+async function pinFileToIPFS(file, artworkId) {
+  const jwt = getPinataJwt();
+  if (!jwt) {
+    throw new Error('Pinata JWT is not configured');
+  }
+
+  const formData = new FormData();
+  const blob = new Blob([file.buffer], {
+    type: file.mimetype || 'application/octet-stream',
+  });
+
+  formData.append('file', blob, file.originalname || `${artworkId}.bin`);
+  formData.append('pinataMetadata', JSON.stringify({
+    name: `muse-artwork-${artworkId}`,
+    keyvalues: {
+      project: 'Wuta-Wuta',
+      type: 'artwork',
+      artworkId,
+    },
+  }));
+  formData.append('pinataOptions', JSON.stringify({ cidVersion: 1 }));
+
+  const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
+    maxBodyLength: Infinity,
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+    },
+  });
+
+  return response.data.IpfsHash;
+}
+
+async function pinMetadataToIPFS(metadata, artworkId) {
+  const response = await axios.post('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+    pinataContent: metadata,
+    pinataMetadata: {
+      name: `muse-metadata-${artworkId}`,
+      keyvalues: {
+        project: 'Wuta-Wuta',
+        type: 'metadata',
+        artworkId,
+      },
+    },
+    pinataOptions: { cidVersion: 1 },
+  }, {
+    headers: pinataJsonHeaders(),
+  });
+
+  return response.data.IpfsHash;
+}
+
+async function verifyCIDPinned(cid) {
+  const response = await axios.get('https://api.pinata.cloud/pinning/pinList', {
+    headers: pinataJsonHeaders(),
+    params: { hashContains: cid, status: 'pinned' },
+  });
+
+  return response.data.count > 0;
+}
+
 // Routes
 app.post('/api/ai/generate', async (req, res) => {
   try {
@@ -200,6 +320,74 @@ app.post('/api/ai/generate', async (req, res) => {
       success: false,
       error: error.message,
       data: mockResponse // Provide fallback
+    });
+  }
+});
+
+app.post('/api/muse/upload/challenge', (req, res) => {
+  const {
+    publicKey,
+    artworkId,
+    name,
+    description,
+    aiModel,
+    mimeType,
+    fileSha256,
+    fileSize,
+    timestamp,
+    nonce,
+  } = req.body || {};
+
+  const challenge = buildMuseUploadChallenge({
+    publicKey: String(publicKey || '').trim(),
+    artworkId: String(artworkId || '').trim(),
+    name: String(name || '').trim(),
+    description: String(description || '').trim(),
+    aiModel: String(aiModel || '').trim(),
+    mimeType: String(mimeType || '').trim(),
+    fileSha256: String(fileSha256 || '').trim(),
+    fileSize: Number(fileSize || 0),
+    timestamp: String(timestamp || '').trim(),
+    nonce: String(nonce || '').trim(),
+  });
+
+  res.json({ success: true, challenge });
+});
+
+app.post('/api/muse/upload', upload.single('artwork'), async (req, res) => {
+  try {
+    const validation = validateMuseUploadRequest({
+      fields: req.body,
+      file: req.file,
+    });
+
+    const imageCID = await pinFileToIPFS(req.file, validation.fields.artworkId);
+    const metadata = buildNFTMetadata({
+      name: validation.fields.name,
+      description: validation.fields.description,
+      imageCID,
+      artistAddress: validation.fields.publicKey,
+      aiModel: validation.fields.aiModel,
+    });
+    const metadataCID = await pinMetadataToIPFS(metadata, validation.fields.artworkId);
+    const tokenURI = `ipfs://${metadataCID}`;
+    const verified = await verifyCIDPinned(metadataCID);
+
+    res.json({
+      success: true,
+      data: {
+        imageCID,
+        metadataCID,
+        tokenURI,
+        verified,
+        signer: validation.fields.publicKey,
+      },
+    });
+  } catch (error) {
+    const status = /signature|public key|timestamp|required/i.test(error.message) ? 401 : 400;
+    res.status(status).json({
+      success: false,
+      error: error.message,
     });
   }
 });

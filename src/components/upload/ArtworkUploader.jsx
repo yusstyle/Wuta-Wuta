@@ -1,35 +1,23 @@
 /**
  * ArtworkUploader.jsx
- * Issue #6 — Secure Metadata Storage via IPFS/Pinata
- *
- * UI component: lets an artist pick an AI-generated artwork file,
- * fill in metadata, and pin everything to IPFS. Returns the tokenURI
- * that should be passed to the MuseNFT mint function.
+ * Uploads artwork through the signed Muse backend flow.
  */
 
-import React, { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useIPFSUpload } from "../../hooks/useIPFSUpload";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+import { useWalletStore } from "../../store/walletStore";
 
 function generateArtworkId() {
   return `muse-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-/**
- * ArtworkUploader
- *
- * Props:
- *   onMintReady(tokenURI: string) — called when upload succeeds; parent
- *                                   can pass tokenURI straight to mint tx.
- */
 export default function ArtworkUploader({ onMintReady }) {
   const fileRef = useRef(null);
-  const [preview, setPreview]     = useState(null);
-  const [file, setFile]           = useState(null);
-  const [form, setForm]           = useState({
+  const walletAddress = useWalletStore((state) => state.address);
+  const isConnected = useWalletStore((state) => state.isConnected);
+  const [preview, setPreview] = useState(null);
+  const [file, setFile] = useState(null);
+  const [form, setForm] = useState({
     name: "",
     description: "",
     artistAddress: "",
@@ -38,22 +26,36 @@ export default function ArtworkUploader({ onMintReady }) {
 
   const { upload, uploading, result, error, verified, step } = useIPFSUpload();
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      artistAddress: walletAddress || "",
+    }));
+  }, [walletAddress]);
 
-  function handleFileChange(e) {
-    const chosen = e.target.files?.[0];
+  function handleFileChange(event) {
+    const chosen = event.target.files?.[0];
     if (!chosen) return;
     setFile(chosen);
     setPreview(URL.createObjectURL(chosen));
   }
 
-  function handleFormChange(e) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  function handleFormChange(event) {
+    setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!file) return alert("Please select an artwork file.");
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!isConnected || !walletAddress) {
+      window.alert("Connect your Stellar wallet before uploading.");
+      return;
+    }
+
+    if (!file) {
+      window.alert("Please select an artwork file.");
+      return;
+    }
 
     const artworkInfo = {
       artworkId: generateArtworkId(),
@@ -67,26 +69,20 @@ export default function ArtworkUploader({ onMintReady }) {
       const { tokenURI } = await upload(file, artworkInfo);
       if (onMintReady) onMintReady(tokenURI);
     } catch (_) {
-      // error displayed by hook state
+      // Error is surfaced through hook state.
     }
   }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="artwork-uploader">
       <h2>Upload Artwork to IPFS</h2>
       <p className="subtitle">
-        Your file and metadata will be permanently pinned via Pinata — tamper-proof
-        and content-addressed.
+        Muse now requires a Stellar wallet signature before the backend will pin
+        artwork or metadata.
       </p>
 
       <form onSubmit={handleSubmit}>
-        {/* File drop zone */}
-        <div
-          className="drop-zone"
-          onClick={() => fileRef.current?.click()}
-        >
+        <div className="drop-zone" onClick={() => fileRef.current?.click()}>
           {preview ? (
             <img src={preview} alt="Artwork preview" className="preview-img" />
           ) : (
@@ -101,7 +97,6 @@ export default function ArtworkUploader({ onMintReady }) {
           />
         </div>
 
-        {/* Metadata fields */}
         <label>
           Artwork Title *
           <input
@@ -119,21 +114,21 @@ export default function ArtworkUploader({ onMintReady }) {
             name="description"
             value={form.description}
             onChange={handleFormChange}
-            placeholder="Describe the artwork and the collaboration…"
+            placeholder="Describe the artwork and the collaboration..."
             rows={3}
             required
           />
         </label>
 
         <label>
-          Artist Wallet Address *
+          Artist Stellar Address *
           <input
             name="artistAddress"
             value={form.artistAddress}
             onChange={handleFormChange}
-            placeholder="0x…"
-            pattern="^0x[a-fA-F0-9]{40}$"
-            title="Enter a valid Ethereum address"
+            placeholder="G..."
+            pattern="^G[A-Z2-7]{55}$"
+            title="Enter a valid Stellar public key"
             required
           />
         </label>
@@ -149,12 +144,11 @@ export default function ArtworkUploader({ onMintReady }) {
           </select>
         </label>
 
-        <button type="submit" disabled={uploading}>
-          {uploading ? `${step}` : "Pin to IPFS & Prepare Token URI"}
+        <button type="submit" disabled={uploading || !isConnected}>
+          {uploading ? step : "Sign & Upload to Muse"}
         </button>
       </form>
 
-      {/* ── Status ─────────────────────────────────────────────────────── */}
       {error && (
         <div className="status error">
           <strong>Error:</strong> {error}
@@ -163,7 +157,7 @@ export default function ArtworkUploader({ onMintReady }) {
 
       {result && (
         <div className="status success">
-          <h3>✅ Successfully Pinned to IPFS</h3>
+          <h3>Upload authorized and pinned</h3>
 
           <table className="cid-table">
             <tbody>
@@ -176,7 +170,7 @@ export default function ArtworkUploader({ onMintReady }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    View ↗
+                    View
                   </a>
                 </td>
               </tr>
@@ -189,7 +183,7 @@ export default function ArtworkUploader({ onMintReady }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    View ↗
+                    View
                   </a>
                 </td>
               </tr>
@@ -200,8 +194,8 @@ export default function ArtworkUploader({ onMintReady }) {
                 </td>
               </tr>
               <tr>
-                <th>Pin Verified</th>
-                <td>{verified ? "✅ Confirmed live on Pinata" : "⚠️ Could not verify"}</td>
+                <th>Signature Verified</th>
+                <td>{verified ? "Confirmed" : "Could not verify"}</td>
               </tr>
             </tbody>
           </table>
