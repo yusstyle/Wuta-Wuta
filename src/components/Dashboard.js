@@ -42,8 +42,8 @@ const Dashboard = () => {
       <CardContent className="p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs sm:text-sm font-medium text-gray-600">{title}</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1 sm:mt-2">{value}</p>
+            <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">{title}</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1 sm:mt-2">{value}</p>
             <div className="flex flex-wrap items-center mt-1 sm:mt-2">
               {change > 0 ? (
                 <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-1" />
@@ -53,7 +53,7 @@ const Dashboard = () => {
               <span className={`text-xs sm:text-sm font-medium ${change > 0 ? 'text-green-500' : 'text-red-500'}`}>
                 {Math.abs(change)}%
               </span>
-              <span className="text-xs text-gray-500 ml-1 hidden sm:inline">from last month</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 ml-1 hidden sm:inline">from last month</span>
             </div>
           </div>
           <div className={`p-2.5 sm:p-3 rounded-full ${color}`}>
@@ -68,8 +68,8 @@ const Dashboard = () => {
     <div className="space-y-6 px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Muse Analytics Dashboard</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-2">Real-time insights and analytics for Web3 funding streams</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Muse Analytics Dashboard</h1>
+        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-2">Real-time insights and analytics for Web3 funding streams</p>
       </div>
 
       {/* Stats Grid */}
